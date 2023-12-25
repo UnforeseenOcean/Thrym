@@ -1,12 +1,14 @@
 from vidgear.gears import ScreenGear
 import cv2
-import pyautogui
 import pygetwindow as gw
 import numpy as np
 from decimal import Decimal
 import sys
 import platform
 import time
+import random
+import pyautogui
+from pynput.keyboard import Key, Listener, KeyCode, Controller
 
 # Check if we are running lower version of Python and exit, as we need Python 3.10 or higher
 if sys.version_info[0] <= 3 and sys.version_info[1] < 10:
@@ -16,7 +18,9 @@ if sys.version_info[0] <= 3 and sys.version_info[1] < 10:
 
 print("================================")
 print("Thrym 2.0 - Odin's Eye Starting.")
+print("Now with Fair Fight technology! ")
 print("================================")
+
 pyautogui.PAUSE = 0.01
 # It's stupid, just ignore the names and use x1, y1, x2, y2
 options = {"left": 380, "top": 250, "width": 1920, "height": 1080}
@@ -53,6 +57,11 @@ shieldLvl2 = (0, 255, 255)
 # State machine variable
 sm_Shield = 0
 
+# Fair Fight config
+ff_State = 0
+ff_Level = 5
+toggleOutput = True
+
 # Window title detection
 targetWin = "Ragnarock "
 #targetWin = "Ragnarock.txt - Notepad"
@@ -60,6 +69,35 @@ targetWin = "Ragnarock "
 font=cv2.FONT_HERSHEY_SIMPLEX
 stream = ScreenGear(logging=True, **options).start()
 stream.color_space = cv2.COLOR_RGB2BGR
+# prometheus = Controller()
+
+def on_press(*key):
+    global ff_Level
+    # Read keys and see if it's V, B or N 
+    # V = Lower level, B = Higher level, N = Disable key output until pressed again
+    
+    # tbh I have no idea what I am doing here because the documentation does not mention whether or not it will return lowercase or uppercase letter
+    # print("Received", key)
+    print(key)
+    finger = key[0]
+    if finger == KeyCode.from_char("v"):
+        ff_Level -= 1
+    elif finger == KeyCode.from_char("b"):
+        ff_Level += 1
+    elif finger == KeyCode.from_char("n"):
+        xyz = enableOutput()
+    # Cap the value of level to 0~9
+    if ff_Level > 9:
+        ff_Level = 9
+    elif ff_Level < 0:
+        ff_Level = 0
+
+def doNothing(x):
+    # Discard input
+    pass
+
+listener = Listener(on_press=on_press, on_release=doNothing)
+listener.start()    
 
 def maskArea(frame):
     # Area must be defined first
@@ -266,7 +304,105 @@ def createKeys(inputList):
     
     return keyResult
 
-def sendKeys(input, shieldActive, shieldLevel):
+
+
+def enableOutput():
+    global toggleOutput
+    # When N is pressed
+    if toggleOutput == True:
+        toggleOutput = False
+    elif toggleOutput == False:
+        toggleOutput = True
+    else:
+        toggleOutput = True
+    print("Fair Fight output enabled:", toggleOutput)
+    return None    
+
+
+def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
+    global sm_Shield
+    shieldEnabled = True
+    if len(input) > 0:
+        # print(input, shieldActive, shieldLevel, level, toggleOutput)
+        if level is not None and toggleOutput is True:
+            # print("FF output is enabled")
+            # Cap the value of level to 0~9
+            if int(level) > 9:
+                level = 9
+            elif int(level) < 0:
+                level = 0
+            # Dummy = 0 (only hits 1 in 2 notes, shield disabled)
+            # Easy = 1~2 (only misses 1 in 4~5 notes, shield disabled)
+            # Medium = 3~5 (only misses 1 in 6~8 notes, shield enabled)
+            # Hard = 6~8 (only misses 1 in 9~11 notes, shield enabled)
+            # Expert = 9 (No changes)
+            if level < 9:
+                # Some huge default value to handle errors
+                cfg_missChance = 100
+                
+                if level == 0:
+                    # Disable shield
+                    cfg_missChance = 90
+                    sm_Shield = 0
+                    shieldEnabled = False
+                elif level == 1:
+                    # Disable shield
+                    cfg_missChance = 80
+                    sm_Shield = 0
+                    shieldEnabled = False
+                elif level == 2:
+                    # Disable shield
+                    cfg_missChance = 70
+                    sm_Shield = 0
+                    shieldEnabled = False
+                elif level == 3:
+                    # Disable shield
+                    cfg_missChance = 60
+                    sm_Shield = 0
+                    shieldEnabled = False
+                elif level == 4:
+                    # Disable shield
+                    cfg_missChance = 50
+                    sm_Shield = 0
+                    shieldEnabled = False
+                elif level == 5:
+                    # Disable shield
+                    cfg_missChance = 40
+                    sm_Shield = 0
+                    shieldEnabled = False
+                elif level == 6:
+                    cfg_missChance = 30
+                    shieldEnabled = True
+                elif level == 7:
+                    cfg_missChance = 20
+                    shieldEnabled = True
+                elif level == 8:
+                    cfg_missChance = 10
+                    shieldEnabled = True
+                
+                discard = random.randint(1, 100)
+                
+                if discard < cfg_missChance:
+                    # print("Input discarded!")
+                    return ([], False, 0, False)
+                else:
+                    # print(input)
+                    return (input, shieldActive, shieldLevel, shieldEnabled)
+            else:
+                # print(input)
+                return (input, shieldActive, shieldLevel, True)
+        
+        elif level is not None and toggleOutput is False:
+            # print("FF output is disabled")
+            # Discard everything and return a fake config
+            return ([], False, 0, False)
+        else:
+            raise ValueError("Fair Fight configuration error!")
+    else:
+        return ([], False, 0, False)
+
+def sendKeys(input, shieldActive, shieldLevel, enable):
+    #print("Prometeus hears:", input)
     global sm_Shield
     cwin = gw.getWindowsWithTitle(targetWin)
     if cwin is not None:
@@ -274,15 +410,17 @@ def sendKeys(input, shieldActive, shieldLevel):
     # print(isSafe)
     # Only send the keystrokes to game window
     if isSafe == True:
+        #print("Win focused")
         # Time to send the keys
         if len(input) > 0:
+            #print("Prometeus hits:", input)
             pyautogui.press(input)
         # If it manages to build up enough combos, try to use it
-        if shieldActive == True and shieldLevel == 2:
+        if shieldActive == True and shieldLevel == 2 and enable == True:
             sm_Shield += 1
             if sm_Shield > 8:
                 pyautogui.press("s")
-                pyautogui.press("space")
+                pyautogui.press(Key.space)
                 # Reset state machine to 0
                 sm_Shield = 0
     #else:
@@ -410,11 +548,23 @@ def detectNotes(frame, min_size, max_size):
     
     cv2.rectangle(frame, (int(shieldROI[0]), int(shieldROI[1])), (int(shieldROI[0]+shieldROI[2]), int(shieldROI[1]+shieldROI[3])), color=shColor, thickness=4)
     
+    levelTxtColor = (0, 255, 255)
+    if toggleOutput == True:
+        levelTxtColor = (0, 255, 255)
+    elif toggleOutput == False:
+        levelTxtColor = (128, 128, 128)
+    
+    cv2.putText(frame, str(ff_Level), (1200, 100), font, 3, levelTxtColor, 7)
+    
     # Send keys if possible
     hammer = createKeys(buildKeyCombo(contoursList))
-    sendKeys(hammer, smVal[0], smVal[1])
+    # Run the output keys through Fair Fight governor
+    ff_result = fairFightGovernor(hammer, smVal[0], smVal[1], ff_Level, toggleOutput)
+    # print(ff_result)
+    # Send the results to the keyboard
+    sendKeys(ff_result[0], ff_result[1], ff_result[2], ff_result[3])
     # Display the resulting frame
-    cv2.imshow("IrisView-Blue", blue_mask)
+    # cv2.imshow("IrisView-Blue", blue_mask)
     cv2.imshow("Thrym 2.0 - Odin's Eye", frame)
 
 while True:
@@ -433,11 +583,12 @@ while True:
         break
     
 
+listener.stop()
 cv2.destroyAllWindows()
-stream.stop()
 print(" ")
 print("=====================================================")
 print("We all make mistakes, and that's what makes us human.")
 print("We shall fight again, brother. Farewell.")
 print("=====================================================")
 print(" ")
+stream.stop()

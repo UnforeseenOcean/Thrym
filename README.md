@@ -17,7 +17,12 @@ Thrym is an open-source project provided "as is," without warranty of any kind, 
 Do not cause trouble in the community. **Your actions have consequences.**
 
 ## What?
-This single Python script will "play" the game for you, so you have at least one "person" to play against.
+This single Python script will "play" the game for you, so you have at least one "person" to play against. It's basically a dummy player that will actually put up some semblance of a fight.
+
+The point of this robot is NOT to play the game perfectly, it's just to play it well enough to not feel lonely.
+
+## Why?
+I live in a region where this game is really (and I do mean REALLY) not well-known. I often had to wait until midnight just to play with others, even then many will (not "would") have latency issues or will eventually need to leave to do their things, leaving me with nobody to play. This was not good, so I have developed a solution.
 
 ## How?
 This uses OpenCV to detect the notes and decide which keys to press. It uses various ways to try and optimize the process, such as using LUT (Lookup Table) and using masks to cut away sections that don't require processing.

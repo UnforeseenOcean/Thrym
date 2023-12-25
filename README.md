@@ -33,7 +33,7 @@ You need the following to use this robot.
 2. (Optional) Additional DLCs to play
 3. Another computer or a VR headset on another computer to join the multiplayer match
 4. Second copy of Ragnarock on Steam (PC) to run on the computer/headset you'll use to play the game
-5. Python libraries: `vidgear, opencv-python, pyautogui, pygetwindow, numpy`
+5. Python libraries: `vidgear, opencv-python, pyautogui, pygetwindow, numpy, pynput`
 6. Python 3.10 or newer
 
 ## Note

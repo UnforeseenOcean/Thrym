@@ -7,7 +7,6 @@ import sys
 import platform
 import time
 import random
-import pyautogui
 from pynput.keyboard import Key, Listener, KeyCode, Controller
 
 # Check if we are running lower version of Python and exit, as we need Python 3.10 or higher
@@ -16,12 +15,16 @@ if sys.version_info[0] <= 3 and sys.version_info[1] < 10:
     raise EnvironmentError("ERROR: Please use Python 3.10 and above!")
     sys.exit(0)
 
+splash = cv2.imread("./Thrym-Splash.png", 0)
+cv2.imshow("Thrym", splash)
+cv2.waitKey(3000)
+cv2.destroyWindow("Thrym")
+
 print("================================")
-print("Thrym 2.0 - Odin's Eye Starting.")
+print("Thrym 2.2 - Odin's Eye Starting.")
 print("Now with Fair Fight technology! ")
 print("================================")
 
-pyautogui.PAUSE = 0.01
 # It's stupid, just ignore the names and use x1, y1, x2, y2
 options = {"left": 380, "top": 250, "width": 1920, "height": 1080}
 # ROI (Left, Top, Width, Height)
@@ -75,14 +78,17 @@ ff_keyStack = 0
 ff_fatigueTimer = 5.0
 ff_currentTime = 0.0
 ff_fatigueTemp = 0.0
+
+
 # Window title detection
 targetWin = "Ragnarock "
 #targetWin = "Ragnarock.txt - Notepad"
 
+
 font=cv2.FONT_HERSHEY_SIMPLEX
 stream = ScreenGear(logging=True, **options).start()
 stream.color_space = cv2.COLOR_RGB2BGR
-# prometheus = Controller()
+prometheus = Controller()
 
 def on_press(*key):
     global ff_Level
@@ -90,10 +96,6 @@ def on_press(*key):
     global toggleFatigue
     # Read keys and see if it's V, B or N 
     # V = Lower level, B = Higher level, N = Disable key output until pressed again
-    
-    # tbh I have no idea what I am doing here because the documentation does not mention whether or not it will return lowercase or uppercase letter
-    # print("Received", key)
-    # print(key)
     finger = key[0]
     if finger == KeyCode.from_char("v") and ff_fatigueEnabled == False:
         ff_Level -= 1
@@ -141,8 +143,6 @@ def maskArea(frame):
 
 def calcROIArea(left, top, width, height, image_x, image_y):
     # Within image_x and image_y, calculate the area of pixels requested
-    # Add small delay to lower CPU usage
-    time.sleep(0.001)
     # Convert all values to integer
     left = int(left)
     top = int(top)
@@ -184,8 +184,6 @@ def calcColorRange(h, tolerance):
         return [hMin, hMax]
 
 def isShieldActive(frame, x, y, w, h):
-    # Add small delay to lower CPU usage
-    time.sleep(0.001)
     # Trim input frame to size
     frame = frame[y:y+h, x:x+w]
     # Hack: Flip "RGB" image to "BGR"
@@ -231,8 +229,6 @@ def isShieldActive(frame, x, y, w, h):
     return (isActive, comboLevel)
 
 def checkRanges(value1, value2):
-    # Add small delay to lower CPU usage
-    time.sleep(0.001)
     ranges = [
     (50, 400), 
     (430, 570), 
@@ -287,7 +283,6 @@ def buildKeyCombo(list):
                 conv[range_index1] = True        
         else:
             print("OOPS! Pls tune your settings.")
-    # print(list, conv)
     return conv
 
 
@@ -378,12 +373,10 @@ def fatigueSim(input, level):
     
     if len(input) >= 1:
         ff_keyStack += 1
-        # print("Detected", ff_keyStack, "notes")
         ff_currentTime = 0
         
     if len(input) == 0:
         ff_currentTime += 0.01
-        # print("Time: ", ff_currentTime)
     # If left idle for x amount of time:
     if ff_fatigueTimer < ff_currentTime:
         ff_keyStack = 0
@@ -393,22 +386,17 @@ def fatigueSim(input, level):
     # Hard cap at 90%
     if ff_fatigueLevel > 90.0:
         ff_fatigueLevel = 90.0
-    # print("Fatigue:", ff_fatigueLevel)
     return ff_fatigueLevel
     
 def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
     global sm_Shield
     global ff_keyStack
-    # Add small delay to lower CPU usage
-    time.sleep(0.001)
     
     fatigueSimOutput = fatigueSim(input, level)
     
     shieldEnabled = True
     if len(input) > 0 and ff_fatigueEnabled == False:
-        # print(input, shieldActive, shieldLevel, level, toggleOutput)
         if level is not None and toggleOutput is True:
-            # print("FF output is enabled")
             # Cap the value of level to 0~9
             if int(level) > 9:
                 level = 9
@@ -466,17 +454,13 @@ def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
                 discard = random.randint(1, 100)
                 
                 if discard < cfg_missChance:
-                    # print("Input discarded!")
                     return ([], False, 0, False)
                 else:
-                    # print(input)
                     return (input, shieldActive, shieldLevel, shieldEnabled)
             else:
-                # print(input)
                 return (input, shieldActive, shieldLevel, True)
         
         elif level is not None and toggleOutput is False:
-            # print("FF output is disabled")
             # Discard everything and return a fake config
             return ([], False, 0, False)
         else:
@@ -497,35 +481,30 @@ def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
         return ([], False, 0, False)
 
 def sendKeys(input, shieldActive, shieldLevel, enable):
-    #print("Prometeus hears:", input)
     global sm_Shield
     cwin = gw.getWindowsWithTitle(targetWin)
-    if cwin is not None:
+    if len(cwin) != 0:
         isSafe = cwin[0].isActive
-    # print(isSafe)
+    else:
+        isSafe = False
     # Only send the keystrokes to game window
     if isSafe == True:
-        #print("Win focused")
         # Time to send the keys
         if len(input) > 0:
-            #print("Prometeus hits:", input)
-            pyautogui.press(input)
+            for pressKey in input:
+                prometheus.tap(pressKey)
         # If it manages to build up enough combos, try to use it
         if shieldActive == True and shieldLevel == 2 and enable == True:
             sm_Shield += 1
-            if sm_Shield > 8:
-                pyautogui.press("s")
-                pyautogui.press(Key.space)
+            if sm_Shield > 1:
+                prometheus.tap("s")
+                prometheus.tap(Key.space)
                 # Reset state machine to 0
                 sm_Shield = 0
-    #else:
-        # print("WARN: Window not in focus! No keystrokes will be sent.")
 
 def detectNotes(frame, min_size, max_size):
     global options
     global toggleOutput
-    # Add small delay to lower CPU usage
-    time.sleep(0.001)
     
     # Mask off areas
     frame = maskArea(frame)
@@ -536,11 +515,8 @@ def detectNotes(frame, min_size, max_size):
     
     # Define the region of interest (ROI) based on input coordinates
     areaSize = calcROIArea(noteROI[0], noteROI[1], noteROI[2], noteROI[3], options.get("width"), options.get("height"))
-    # print(areaSize)
     # Crop the frame
     area = frame[areaSize[0]:areaSize[1], areaSize[2]:areaSize[3]]
-    # Hack to convert "RGB" colors back to true colors as it is flipped in the source
-    # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     # Convert the frame to the HSV color space
     hsv = cv2.cvtColor(area, cv2.COLOR_BGR2HSV_FULL)
     
@@ -558,8 +534,6 @@ def detectNotes(frame, min_size, max_size):
     
     # Erode the result to remove small particles
     blue_mask = erodeFrame(blue_mask)
-    # Apply adaptive thresholding
-    #blue_mask = cv2.adaptiveThreshold(blue_mask, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, blockSize, constantOffset)
     # Apply further thresholding to remove noise
     vfdfg, blue_mask = cv2.threshold(blue_mask, -1, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
     
@@ -572,13 +546,11 @@ def detectNotes(frame, min_size, max_size):
         area = int(cv2.contourArea(contour))
         # Check if the area is within the specified size range
         if min_size < area < max_size:
-            # print("Area: ", area)
             # Get the bounding box coordinates
             x, y, w, h = map(int, cv2.boundingRect(contour))
             # Fix for the wrong offset
             x += noteROI[0]
             y += noteROI[1]
-            # print(x, y, w, h)
             contoursList.append([x+w, y+h])
             if y >= beatLine[1]:
                 rectColor = (0, 0, 255)
@@ -666,12 +638,21 @@ def detectNotes(frame, min_size, max_size):
     hammer = createKeys(buildKeyCombo(contoursList))
     # Run the output keys through Fair Fight governor
     ff_result = fairFightGovernor(hammer, smVal[0], smVal[1], ff_Level, toggleOutput)
-    # print(ff_result)
     # Send the results to the keyboard
     sendKeys(ff_result[0], ff_result[1], ff_result[2], ff_result[3])
     # Display the resulting frame
     # cv2.imshow("IrisView-Blue", blue_mask)
     cv2.imshow("Thrym 2.0 - Odin's Eye", frame)
+
+print(" ")
+print("===================================================")
+print("Welcome, human. Let me be your opponent.")
+print("Open the game and click on the screen.")
+print("To invite others, open a lobby and select a song.")
+print(" ")
+print("Press Z on Odin's Eye to exit, V, B, N, M for menu.")
+print("===================================================")
+print(" ")
 
 while True:
     # Get new frame
@@ -693,8 +674,8 @@ listener.stop()
 cv2.destroyAllWindows()
 print(" ")
 print("=====================================================")
-print("We all make mistakes, and that's what makes us human.")
-print("We shall fight again, brother. Farewell.")
+print("We all make mistakes, and that's what makes us being.")
+print("We shall fight again, human. Farewell.")
 print("=====================================================")
 print(" ")
 stream.stop()

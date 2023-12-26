@@ -59,9 +59,22 @@ sm_Shield = 0
 
 # Fair Fight config
 ff_State = 0
-ff_Level = 5
+ff_Level = 8
 toggleOutput = True
 
+# Fair Fight fatigue simulation
+# Changing this to True will disable the conventional fixed difficulty system
+ff_fatigueEnabled = True
+# Current level variable
+ff_fatigueLevel = 0.0
+# How fast should Thrym get tired? (addition of score per note pair)
+ff_fatigueSpeed = 0.01
+# How many keys were pressed so far
+ff_keyStack = 0
+# After this time, the fatigue timer should reset
+ff_fatigueTimer = 5.0
+ff_currentTime = 0.0
+ff_fatigueTemp = 0.0
 # Window title detection
 targetWin = "Ragnarock "
 #targetWin = "Ragnarock.txt - Notepad"
@@ -73,19 +86,35 @@ stream.color_space = cv2.COLOR_RGB2BGR
 
 def on_press(*key):
     global ff_Level
+    global ff_fatigueSpeed
+    global toggleFatigue
     # Read keys and see if it's V, B or N 
     # V = Lower level, B = Higher level, N = Disable key output until pressed again
     
     # tbh I have no idea what I am doing here because the documentation does not mention whether or not it will return lowercase or uppercase letter
     # print("Received", key)
-    print(key)
+    # print(key)
     finger = key[0]
-    if finger == KeyCode.from_char("v"):
+    if finger == KeyCode.from_char("v") and ff_fatigueEnabled == False:
         ff_Level -= 1
-    elif finger == KeyCode.from_char("b"):
+    elif finger == KeyCode.from_char("v") and ff_fatigueEnabled == True:
+        if ff_fatigueSpeed >= 0.02:
+            ff_fatigueSpeed -= 0.01
+        else: 
+            ff_fatigueSpeed = 0.01
+        print("Fatigue speed:", ff_fatigueSpeed)
+    elif finger == KeyCode.from_char("b") and ff_fatigueEnabled == False:
         ff_Level += 1
+    elif finger == KeyCode.from_char("b") and ff_fatigueEnabled == True:
+        if ff_fatigueSpeed < 1.0:
+            ff_fatigueSpeed += 0.01
+        else: 
+            ff_fatigueSpeed = 1.0
+        print("Fatigue speed:", ff_fatigueSpeed)
     elif finger == KeyCode.from_char("n"):
         xyz = enableOutput()
+    elif finger == KeyCode.from_char("m"):
+        abc = toggleFatigue()
     # Cap the value of level to 0~9
     if ff_Level > 9:
         ff_Level = 9
@@ -112,7 +141,8 @@ def maskArea(frame):
 
 def calcROIArea(left, top, width, height, image_x, image_y):
     # Within image_x and image_y, calculate the area of pixels requested
-    
+    # Add small delay to lower CPU usage
+    time.sleep(0.001)
     # Convert all values to integer
     left = int(left)
     top = int(top)
@@ -154,6 +184,8 @@ def calcColorRange(h, tolerance):
         return [hMin, hMax]
 
 def isShieldActive(frame, x, y, w, h):
+    # Add small delay to lower CPU usage
+    time.sleep(0.001)
     # Trim input frame to size
     frame = frame[y:y+h, x:x+w]
     # Hack: Flip "RGB" image to "BGR"
@@ -199,6 +231,8 @@ def isShieldActive(frame, x, y, w, h):
     return (isActive, comboLevel)
 
 def checkRanges(value1, value2):
+    # Add small delay to lower CPU usage
+    time.sleep(0.001)
     ranges = [
     (50, 400), 
     (430, 570), 
@@ -299,12 +333,8 @@ def createKeys(inputList):
         (False, True, True, False): ["w", "o"], 
         (False, False, True, True): ["e", "p"]
         }
-    
     keyResult = keystrokes.get(tuple(inputList), [])
-    
     return keyResult
-
-
 
 def enableOutput():
     global toggleOutput
@@ -318,11 +348,64 @@ def enableOutput():
     print("Fair Fight output enabled:", toggleOutput)
     return None    
 
+def toggleFatigue():
+    global ff_fatigueEnabled
+    # When M is pressed
+    if ff_fatigueEnabled == True:
+        ff_fatigueEnabled = False
+    elif ff_fatigueEnabled == False:
+        ff_fatigueEnabled = True
+    else:
+        ff_fatigueEnabled = False
+    print("Fatigue mode enabled:", ff_fatigueEnabled)
+    return None 
 
+def fatigueSim(input, level):
+    global ff_keyStack
+    global ff_fatigueSpeed
+    global ff_fatigueTimer
+    global ff_fatigueLevel
+    global ff_currentTime
+    global ff_fatigueTemp
+    
+    if ff_fatigueSpeed < 0.01:
+        ff_fatigueSpeed = 0.01
+    
+    if level > 4:
+        min_value = 100 - (level * 10)
+    else:
+        min_value = 70
+    
+    if len(input) >= 1:
+        ff_keyStack += 1
+        # print("Detected", ff_keyStack, "notes")
+        ff_currentTime = 0
+        
+    if len(input) == 0:
+        ff_currentTime += 0.01
+        # print("Time: ", ff_currentTime)
+    # If left idle for x amount of time:
+    if ff_fatigueTimer < ff_currentTime:
+        ff_keyStack = 0
+    
+    ff_fatigueLevel = ff_keyStack * ff_fatigueSpeed + min_value
+    
+    # Hard cap at 90%
+    if ff_fatigueLevel > 90.0:
+        ff_fatigueLevel = 90.0
+    # print("Fatigue:", ff_fatigueLevel)
+    return ff_fatigueLevel
+    
 def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
     global sm_Shield
+    global ff_keyStack
+    # Add small delay to lower CPU usage
+    time.sleep(0.001)
+    
+    fatigueSimOutput = fatigueSim(input, level)
+    
     shieldEnabled = True
-    if len(input) > 0:
+    if len(input) > 0 and ff_fatigueEnabled == False:
         # print(input, shieldActive, shieldLevel, level, toggleOutput)
         if level is not None and toggleOutput is True:
             # print("FF output is enabled")
@@ -398,6 +481,18 @@ def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
             return ([], False, 0, False)
         else:
             raise ValueError("Fair Fight configuration error!")
+    
+    elif len(input) > 0 and ff_fatigueEnabled == True:
+        # Define a fallback value just in case
+        nuancedMissChance = 100.0
+        discardChance = random.uniform(0.0, nuancedMissChance)
+        if discardChance < fatigueSimOutput:
+            ff_keyStack -= 2
+            if ff_keyStack < 0:
+                ff_keyStack = 0
+            return ([], False, 0, False)
+        else:
+            return (input, shieldActive, shieldLevel, shieldEnabled)
     else:
         return ([], False, 0, False)
 
@@ -428,6 +523,10 @@ def sendKeys(input, shieldActive, shieldLevel, enable):
 
 def detectNotes(frame, min_size, max_size):
     global options
+    global toggleOutput
+    # Add small delay to lower CPU usage
+    time.sleep(0.001)
+    
     # Mask off areas
     frame = maskArea(frame)
     # This time please handle the ROI area calculation correctly
@@ -551,10 +650,17 @@ def detectNotes(frame, min_size, max_size):
     levelTxtColor = (0, 255, 255)
     if toggleOutput == True:
         levelTxtColor = (0, 255, 255)
+    elif toggleOutput == True and ff_fatigueEnabled == True:
+        levelTxtColor = (255, 255, 0)
     elif toggleOutput == False:
         levelTxtColor = (128, 128, 128)
-    
+        
     cv2.putText(frame, str(ff_Level), (1200, 100), font, 3, levelTxtColor, 7)
+    if ff_fatigueEnabled == True:
+        fText = "C" + str(Decimal(ff_fatigueSpeed).quantize(Decimal("1.00")))
+        fValue = "F" + str(Decimal(ff_fatigueLevel).quantize(Decimal("1.00")))
+        cv2.putText(frame, fText, (1200, 150), font, 1.5, levelTxtColor, 4)
+        cv2.putText(frame, fValue, (1200, 200), font, 1.5, levelTxtColor, 4)
     
     # Send keys if possible
     hammer = createKeys(buildKeyCombo(contoursList))

@@ -43,4 +43,20 @@ You need the following to use this robot.
 - The author is not responsible for any damages or trouble you may encounter by choosing to use this script.
 
 ## A short story based on the development background
-It was one of the nights before the Yuletide. A lone poet, whose friends have all but disappeared, was writing a tome. A tome, birthed in sorrow and loneliness, that will create an imperfect copy of what his friends used to be -- a jotunn. With the power of the snake and Thor's hammer, fueled by the water from the Seed of Determination and the gift of Freya, he has brought his creation to life and named the jotunn Thrym. The first jotunn created by the tome had five imperfect and flawed eyes, and when he visited the village, he was met with the Viking warriors who challenged him to a battle. In this battle, Thrym has shown that even with flawed eyes, the jotunn could fight reasonably well against them, earning him an honorable name. But it was not enough for Thrym. Thrym has returned to the poet and requested that he be turned back into the dust, and from this dust, a better warrior be born. The poet agreed and went to work. From the dust the first jotunn Thrym has returned to, the second jotunn Thrym was born. Thrym now had two eyes, two hands, and six fingers, and was taught a short list of actions to perform. Thrym has returned to the village and now awaits any warrior who will challenge him to a battle of drums with arcane powers.
+It was one of the nights before the Yuletide. A lone poet, whose friends have all but disappeared, was writing a tome. 
+
+A tome, birthed in sorrow and loneliness, that will create an imperfect copy of what his friends used to be -- a jotunn. 
+
+With the power of the snake and Thor's hammer, fueled by the potion made from the Seed of Determination and the gift of Freya, he has brought his creation to life and named the jotunn Thrym. 
+
+The first jotunn created by the tome had five imperfect and flawed eyes, and when he visited the village, he was met with the Viking warriors who challenged him to a battle. 
+
+In this battle, Thrym has shown that even with flawed eyes, the jotunn could fight reasonably well against them, earning him an honorable name. But it was not enough for Thrym. 
+
+Thrym has returned to the poet and requested that he be turned back into the dust, and from this dust, a better warrior be born. 
+
+The poet agreed and went to work. From the dust the first jotunn Thrym has returned to, the second jotunn Thrym was born. 
+
+Thrym now had two eyes, two hands, and six fingers, and was taught a short list of actions to perform. 
+
+Thrym has returned to the village and now awaits any warrior who will challenge him to a battle of drums with arcane powers.

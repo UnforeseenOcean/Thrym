@@ -33,8 +33,20 @@ You need the following to use this robot.
 2. (Optional) Additional DLCs to play
 3. Another computer or a VR headset on another computer to join the multiplayer match
 4. Second copy of Ragnarock on Steam (PC) to run on the computer/headset you'll use to play the game
-5. Python libraries: `vidgear, opencv-python, pyautogui, pygetwindow, numpy, pynput`
-6. Python 3.10 or newer
+5. Python libraries: `vidgear, opencv-python, pygetwindow, numpy, pynput, tomlkit`
+6. Python 3.11 or newer
+
+## How to use
+You do need a small setting change for this to work flawlessly.
+- Check "Add to PATH variable" while installing Python 3.11
+Then, do this:
+1. Open a new command prompt by clicking on the folder path bar (next to the "Previous" arrow menu) and typing `cmd`, then type `pip install -r requirements.txt`
+  - If you get an error about access being denied or a permission issue, launch a separate command prompt with admin privileges, navigate to the folder where the script is, and then try again
+2. After all the required libraries are installed, type `python thrym.py` to start it.
+3. You can press any key on the splash screen to skip it.
+4. Play around with the settings, press V to lower the value, B to increase the value, N to toggle Thrym's key output, and M to toggle between fatigue mode and static mode.
+5. Note down the setting you found the most enjoyable, and edit the `thrymConfig.toml` to make it a default, per the instructions inside the config file.
+6. Press Z to exit.
 
 ## Note
 - Using this bot to cheat on the leaderboards will not end well.

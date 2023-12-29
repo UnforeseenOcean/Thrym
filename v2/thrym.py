@@ -7,23 +7,26 @@ import sys
 import platform
 import time
 import random
+import os
+import tomllib
+from tomlkit import nl, comment, document, table, dump, load
 from pynput.keyboard import Key, Listener, KeyCode, Controller
-
-# Check if we are running lower version of Python and exit, as we need Python 3.10 or higher
-if sys.version_info[0] <= 3 and sys.version_info[1] < 10:
+# Check if we are running lower version of Python and exit, as we need Python 3.11 or higher
+if sys.version_info[0] <= 3 and sys.version_info[1] < 11:
     print("FATAL ERROR: SHIT'S FUCKED")
-    raise EnvironmentError("ERROR: Please use Python 3.10 and above!")
+    raise EnvironmentError("ERROR: Please use Python 3.11 and above!")
     sys.exit(0)
-
-splash = cv2.imread("./Thrym-Splash.png", 0)
-cv2.imshow("Thrym", splash)
-cv2.waitKey(3000)
-cv2.destroyWindow("Thrym")
 
 print("================================")
 print("Thrym 2.2 - Odin's Eye Starting.")
 print("Now with Fair Fight technology! ")
 print("================================")
+
+# If debug is set to True, then extra info will be printed
+debug = True
+
+# Skip loading config at all, just use built-in settings
+dontLoadConfig = False
 
 # It's stupid, just ignore the names and use x1, y1, x2, y2
 options = {"left": 380, "top": 250, "width": 1920, "height": 1080}
@@ -37,17 +40,15 @@ noteColor = (147, 255, 48)
 # Wrong color list: 
 # Nidavallir water is 131,172,197
 # Midgard water near the center is 149,174,56
-noteColorTol = (7, 5)
+noteColorTol = (6, 12)
 # Note saturation
 noteSaturation = (49, 255)
 # Note brightness
 noteBrightness = (40, 255)
-# Adaptive block thresholding parameters
+# Erosion constant value (higher = more conservative about objects)
 erosionConstant = 9
-blockSize = 5
-constantOffset = 5
 # When to hit the notes
-beatLine = (1099, 450)
+beatLine = (1099, 480)
 
 # Shield detection area
 # ROI (Left, Top, Width, Height)
@@ -79,12 +80,172 @@ ff_fatigueTimer = 5.0
 ff_currentTime = 0.0
 ff_fatigueTemp = 0.0
 
-
 # Window title detection
 targetWin = "Ragnarock "
-#targetWin = "Ragnarock.txt - Notepad"
 
+skipSplash = False
+configPath = "./thrymConfig.toml"
+globalConfig = None
 
+def makeConfig():
+    config = document()
+    config.add(comment("Thrym Configuration"))
+    config.add(nl())
+    
+    config.add(comment("Splash Screen Setting"))
+    splashSetting = table()
+    splashSetting.add("skipSplash", False)
+    config.add("splash", splashSetting)
+    config.add(nl())
+    
+    config.add(comment("Note Detection Settings"))
+    noteSetting = table()
+    noteSetting.add("note_ROI", noteROI)
+    noteSetting["note_ROI"].comment("Region of Interest for notes")
+    noteSetting.add("note_Size", noteSize)
+    noteSetting["note_Size"].comment("Note size (min, max)")
+    noteSetting.add("note_Color", noteColor)
+    noteSetting["note_Color"].comment("Note base color")
+    noteSetting.add("note_ColorTolerance", noteColorTol)
+    noteSetting["note_ColorTolerance"].comment("Note color (hue) tolerance (lower, higher), higher value means more blue/violet, lower value means more green/yellow")
+    noteSetting.add("note_Saturation", noteSaturation)
+    noteSetting["note_Saturation"].comment("Note saturation bounds (min, max)")
+    noteSetting.add("note_Brightness", noteBrightness)
+    noteSetting["note_Brightness"].comment("Note brightness bounds (min, max)")
+    config.add("note", noteSetting)
+    config.add(nl())
+    
+    config.add(comment("Image Processing Settings"))
+    camSetting = table()
+    camSetting.add("erosion_Constant", erosionConstant)
+    camSetting["erosion_Constant"].comment("Erosion constant for image processing (higher = more conservative, lower = more lenient)")
+    config.add("image", camSetting)
+    config.add(nl())
+    
+    config.add(comment("Timing Settings"))
+    timingSetting = table()
+    timingSetting.add("beat_Line", beatLine)
+    timingSetting["beat_Line"].comment("Hit line (x, y) - You only need to edit the y value, x is not used. Below this line, Thrym will try to hit the key.")
+    config.add("timing", timingSetting)
+    config.add(nl())
+    
+    config.add(comment("Shield Sensing Area Setting"))
+    shieldSetting = table()
+    shieldSetting.add("shield_ROI", shieldROI)
+    shieldSetting["shield_ROI"].comment("Shield ROI setting - x, y, width, height")
+    config.add("shield", shieldSetting)
+    config.add(nl())
+    
+    config.add(comment("Fair Fight Default Settings"))
+    ffSetting = table()
+    ffSetting.add("level", ff_Level)
+    ffSetting["level"].comment("Fair Fight default level, 0~9, 0 is the easiest to beat, 9 is hardest possible")
+    ffSetting.add("fatigueEnabled", True)
+    ffSetting.add("fatigueSpeed", ff_fatigueSpeed)
+    ffSetting["fatigueSpeed"].comment("Fair Fight fatigue speed, adjusts how much Thrym will get tired per note")
+    ffSetting.add("fatigueTimer", ff_fatigueTimer)
+    ffSetting["fatigueTimer"].comment("Fair Fight fatigue reset delay. 5 equates to around 10 seconds.")
+    config.add("fairfight", ffSetting)
+    config.add(nl())
+    
+    config.add(comment("Target Window Settings"))
+    winSetting = table()
+    winSetting.add("targetWindow", targetWin)
+    winSetting["targetWindow"].comment("Target window name. By default, it should be \"Ragnarock \".")
+    config.add("window", winSetting)
+    
+    with open(configPath, "w") as cfg:
+        dump(config, cfg)
+    
+def isConfigValid(path):
+    global globalConfig
+    if path is None:
+        raise ValueError("Config path is invalid or None")
+    else:
+        checkResult = os.path.isfile(path)
+        if checkResult != True:
+            print(" ")
+            print("!! ERROR: No config file, making a new one !!")
+            print(" ")
+            makeConfig()
+            return False
+        else:
+            with open(configPath, "rb") as e:
+                globalConfig = tomllib.load(e)
+                # print(globalConfig)
+                return True
+
+def loadConfig():
+    global skipSplash
+    global noteROI
+    global noteSize
+    global noteColor
+    global noteColorTol
+    global noteSaturation
+    global noteBrightness
+    global erosionConstant
+    global beatLine
+    global shieldROI
+    global ff_Level
+    global ff_fatigueEnabled
+    global ff_fatigueSpeed
+    global ff_fatigueTimer
+    global targetWin
+    
+    if isConfigValid(configPath) == True:
+        nr = tuple(globalConfig["note"]["note_ROI"])
+        ns = tuple(globalConfig["note"]["note_Size"])
+        nc = tuple(globalConfig["note"]["note_Color"])
+        nct = tuple(globalConfig["note"]["note_ColorTolerance"])
+        nst = tuple(globalConfig["note"]["note_Saturation"])
+        nb = tuple(globalConfig["note"]["note_Brightness"])
+        bl = tuple(globalConfig["timing"]["beat_Line"])
+        sr = tuple(globalConfig["shield"]["shield_ROI"])
+        
+        skipSplash = globalConfig["splash"]["skipSplash"]
+        noteROI = nr
+        noteSize = ns
+        noteColor = nc
+        noteColorTol = nct
+        noteSaturation = nst
+        noteBrightness = nb
+        erosionConstant = globalConfig["image"]["erosion_Constant"]
+        beatLine = bl
+        shieldROI = sr
+        ff_Level = globalConfig["fairfight"]["level"]
+        ff_fatigueEnabled = globalConfig["fairfight"]["fatigueEnabled"]
+        ff_fatigueSpeed = globalConfig["fairfight"]["fatigueSpeed"]
+        ff_fatigueTimer = globalConfig["fairfight"]["fatigueTimer"]
+        targetWin = globalConfig["window"]["targetWindow"]
+        if debug == True:
+            print("=== Config Dump ===")
+            print("Skip Splash:", skipSplash)
+            print("Note ROI:", noteROI)
+            print("Note Size:", noteSize)
+            print("Note Color:", noteColor)
+            print("Note Color Tolerance:", noteColorTol)
+            print("Note Saturation:", noteSaturation)
+            print("Note Brightness:", noteBrightness)
+            print("Erosion Intensity:", erosionConstant)
+            print("Beat Line:", beatLine)
+            print("Shield ROI:", shieldROI)
+            print("Fair Fight Level:", ff_Level)
+            print("Fair Fight Fatigue Enabled:", ff_fatigueEnabled)
+            print("Fair Fight Fatigue Speed:", ff_fatigueSpeed)
+            print("Fair Fight Fatigue Reset Time:", ff_fatigueTimer)
+            print("Target Window:", targetWin)
+    else:
+        print("No valid config found, continuing with default.")
+        pass
+if dontLoadConfig == False:
+    loadConfig()
+
+if skipSplash == False:
+    splash = cv2.imread("./Thrym-Splash.png", 0)
+    cv2.imshow("Thrym", splash)
+    cv2.waitKey(3000)
+    cv2.destroyWindow("Thrym")
+    
 font=cv2.FONT_HERSHEY_SIMPLEX
 stream = ScreenGear(logging=True, **options).start()
 stream.color_space = cv2.COLOR_RGB2BGR
@@ -641,7 +802,7 @@ def detectNotes(frame, min_size, max_size):
     # Send the results to the keyboard
     sendKeys(ff_result[0], ff_result[1], ff_result[2], ff_result[3])
     # Display the resulting frame
-    # cv2.imshow("IrisView-Blue", blue_mask)
+    cv2.imshow("IrisView-Blue", blue_mask)
     cv2.imshow("Thrym 2.0 - Odin's Eye", frame)
 
 print(" ")

@@ -1,0 +1,6 @@
+numpy==1.24.1
+opencv-python==4.8.1.78
+PyGetWindow==0.0.9
+pynput==1.7.6
+tomlkit==0.12.3
+vidgear==0.3.2

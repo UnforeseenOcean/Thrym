@@ -1,6 +1,7 @@
 from vidgear.gears import ScreenGear
 import cv2
-import pygetwindow as gw
+from typing import Optional
+from ctypes import wintypes, windll, create_unicode_buffer
 import numpy as np
 from decimal import Decimal
 import sys
@@ -11,6 +12,7 @@ import os
 import tomllib
 from tomlkit import nl, comment, document, table, dump, load
 from pynput.keyboard import Key, Listener, KeyCode, Controller
+
 # Check if we are running lower version of Python and exit, as we need Python 3.11 or higher
 if sys.version_info[0] <= 3 and sys.version_info[1] < 11:
     print("FATAL ERROR: SHIT'S FUCKED")
@@ -18,15 +20,21 @@ if sys.version_info[0] <= 3 and sys.version_info[1] < 11:
     sys.exit(0)
 
 print("================================")
-print("Thrym 2.2 - Odin's Eye Starting.")
+print("Thrym 2.4 - Odin's Eye Starting.")
 print("Now with Fair Fight technology! ")
 print("================================")
 
 # If debug is set to True, then extra info will be printed
-debug = True
+debug = False
 
 # Skip loading config at all, just use built-in settings
 dontLoadConfig = False
+
+# Minimum allowed time spent in thread
+taskFreq = 0.0175
+
+# Disable shield strike
+disableShield = False
 
 # It's stupid, just ignore the names and use x1, y1, x2, y2
 options = {"left": 380, "top": 250, "width": 1920, "height": 1080}
@@ -81,13 +89,16 @@ ff_currentTime = 0.0
 ff_fatigueTemp = 0.0
 
 # Window title detection
-targetWin = "Ragnarock "
+targetWin = "Ragnarock  "
 
 skipSplash = False
 configPath = "./thrymConfig.toml"
 globalConfig = None
 
 def makeConfig():
+    # Note: This method of building a document without sub-function to generate each section separately is discouraged, however due to the fact that each section clearly starts with a comment function, I've left it as is.
+    # If you are writing a new code, don't do this.
+    
     config = document()
     config.add(comment("Thrym Configuration"))
     config.add(nl())
@@ -160,7 +171,7 @@ def makeConfig():
 def isConfigValid(path):
     global globalConfig
     if path is None:
-        raise ValueError("Config path is invalid or None")
+        raise ValueError("Config path cannot be None")
     else:
         checkResult = os.path.isfile(path)
         if checkResult != True:
@@ -237,6 +248,7 @@ def loadConfig():
     else:
         print("No valid config found, continuing with default.")
         pass
+
 if dontLoadConfig == False:
     loadConfig()
 
@@ -251,6 +263,13 @@ stream = ScreenGear(logging=True, **options).start()
 stream.color_space = cv2.COLOR_RGB2BGR
 prometheus = Controller()
 
+def dprint(*input):
+    if debug == True:
+        b = ""
+        for a in input:
+            b += str(a) + " "
+        print(b)
+    
 def on_press(*key):
     global ff_Level
     global ff_fatigueSpeed
@@ -340,9 +359,8 @@ def calcColorRange(h, tolerance):
         hMin = 0
     elif hMax > 255:
         hMax = 255
-    else:
-        # Return the result
-        return [hMin, hMax]
+    
+    return [hMin, hMax]
 
 def isShieldActive(frame, x, y, w, h):
     # Trim input frame to size
@@ -448,10 +466,6 @@ def buildKeyCombo(list):
 
 
 def createKeys(inputList):
-    # List valid key combinations
-    in_valid = [(False, False, False, False), (True, False, False, False), (False, True, False, False), (False, False, True, False), (False, False, False, True), (True, True, False, False), (True, False, True, False), (True, False, False, True), (False, True, False, True), (False, True, True, False), (False, False, True, True)]
-    #int_valid = [[False, False, False, False], [True, False, False, False], [False, True, False, False], [False, False, True, False], [False, False, False, True], [True, True, False, False], [True, False, True, False], [True, False, False, True], [False, True, False, True], [False, True, True, False], [False, False, True, True]]
-    
     # If input is all False, do not do anything and send empty list
     if not any(inputList):
         return []
@@ -641,13 +655,25 @@ def fairFightGovernor(input, shieldActive, shieldLevel, level, toggleOutput):
     else:
         return ([], False, 0, False)
 
+def getForegroundTitle() -> Optional[str]:
+    hWnd = windll.user32.GetForegroundWindow()
+    length = windll.user32.GetWindowTextLengthW(hWnd)
+    buf = create_unicode_buffer(length + 1)
+    windll.user32.GetWindowTextW(hWnd, buf, length + 1)
+    
+    return buf.value if buf.value else None
+
 def sendKeys(input, shieldActive, shieldLevel, enable):
     global sm_Shield
-    cwin = gw.getWindowsWithTitle(targetWin)
-    if len(cwin) != 0:
-        isSafe = cwin[0].isActive
+    cwin = getForegroundTitle()
+    dprint("The title is", cwin, ".")
+    if cwin == targetWin:
+        dprint("Window matches search string")
+        isSafe = True
     else:
+        dprint("Window does NOT match search string")
         isSafe = False
+    
     # Only send the keystrokes to game window
     if isSafe == True:
         # Time to send the keys
@@ -666,6 +692,7 @@ def sendKeys(input, shieldActive, shieldLevel, enable):
 def detectNotes(frame, min_size, max_size):
     global options
     global toggleOutput
+    global sm_Shield
     
     # Mask off areas
     frame = maskArea(frame)
@@ -725,7 +752,6 @@ def detectNotes(frame, min_size, max_size):
             cv2.putText(frame, areatext, (x, y-35), font, 1, rectColor, 2)
     
     smVal = isShieldActive(frame, shieldROI[0], shieldROI[1], shieldROI[2], shieldROI[3])
-    
     shColor = shieldLvl0
     
     if smVal[0] == True:
@@ -799,8 +825,13 @@ def detectNotes(frame, min_size, max_size):
     hammer = createKeys(buildKeyCombo(contoursList))
     # Run the output keys through Fair Fight governor
     ff_result = fairFightGovernor(hammer, smVal[0], smVal[1], ff_Level, toggleOutput)
-    # Send the results to the keyboard
-    sendKeys(ff_result[0], ff_result[1], ff_result[2], ff_result[3])
+        # If shield is disabled, reset the counter back to 0
+    if disableShield == True:
+        # Send the keys minus the shield info
+        sendKeys(ff_result[0], ff_result[1], ff_result[2], False)
+    else:
+        # Send the results to the keyboard
+        sendKeys(ff_result[0], ff_result[1], ff_result[2], ff_result[3])
     # Display the resulting frame
     cv2.imshow("IrisView-Blue", blue_mask)
     cv2.imshow("Thrym 2.0 - Odin's Eye", frame)
@@ -816,6 +847,8 @@ print("===================================================")
 print(" ")
 
 while True:
+    # Start timer
+    startTime = time.time()
     # Get new frame
     frame = stream.read()
     # Kill thread if frame cannot be retrieved
@@ -826,6 +859,16 @@ while True:
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     # Call the function to detect blue objects and mark them with rectangles
     detectNotes(frame, noteSize[0], noteSize[1])
+    # Get time delta
+    execTime = time.time() - startTime
+    # Calculate required time to match that of the setting
+    sleepTime = max(0, taskFreq - execTime)
+    # Wait for that time
+    time.sleep(sleepTime)
+    # If the thread takes longer than set time:
+    if execTime > taskFreq:
+        print(f"WARN: Function took {execTime} seconds.")
+    
     key = cv2.waitKey(1) & 0xFF
     if key == ord("z"):
         break
